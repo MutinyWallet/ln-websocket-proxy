@@ -62,7 +62,8 @@ jobs:
             LINODE_USER=$LINODE_USER \
             IMAGE=$IMAGE \
             NAMESPACE=$NAMESPACE \
-            'bash -s' << 'ENDSSH'
+            PERSONAL_ACCESS_TOKEN=$PERSONAL_ACCESS_TOKEN \
+            bash -s" << 'ENDSSH'
               cd /home/\$LINODE_USER/app
               source .env
               docker login ghcr.io -u \$NAMESPACE -p \$PERSONAL_ACCESS_TOKEN -n
@@ -71,4 +72,3 @@ jobs:
               docker rm ln-websocket-proxy
               docker run --restart unless-stopped -d --name ln-websocket-proxy -p 3001:3001 \$IMAGE
           ENDSSH
-          "
