@@ -70,5 +70,5 @@ jobs:
               docker pull $IMAGE
               docker stop ln-websocket-proxy
               docker rm ln-websocket-proxy
-              docker run --restart unless-stopped -d --name ln-websocket-proxy -p 3001:3001 $IMAGE
+              docker run --restart unless-stopped -d --name ln-websocket-proxy -p 8080:8080 $IMAGE
           ENDSSH
