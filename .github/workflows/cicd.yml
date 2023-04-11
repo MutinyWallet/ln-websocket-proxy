@@ -28,10 +28,10 @@ jobs:
           docker pull ${{ env.IMAGE }} || true
       - name: Build images
         run: |
-          DOCKER_BUILDKIT=1 docker build -f Dockerfile -t mutinywallet/ln-websocket-proxy .
+          DOCKER_BUILDKIT=1 docker build -f Dockerfile -t ${{ env.IMAGE }}:latest .
       - name: Push images
         run: |
-          docker push ${{ env.IMAGE }}
+          docker push ${{ env.IMAGE }}:latest
   deploy:
     name: Deploy to Linode
     runs-on: ubuntu-latest
@@ -64,9 +64,9 @@ jobs:
             export NAMESPACE=$NAMESPACE; \
             export PERSONAL_ACCESS_TOKEN=$PERSONAL_ACCESS_TOKEN; \
             bash -s" << 'ENDSSH'
-              cd /home/$LINODE_USER/app
+              cd /home/proxyuser/app
               source .env
-              docker login ghcr.io -u $NAMESPACE -p $PERSONAL_ACCESS_TOKEN -n
+              docker login ghcr.io -u $NAMESPACE -p $PERSONAL_ACCESS_TOKEN
               docker pull $IMAGE
               docker stop ln-websocket-proxy
               docker rm ln-websocket-proxy
