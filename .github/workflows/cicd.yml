@@ -59,16 +59,16 @@ jobs:
         run: |
           scp  -o StrictHostKeyChecking=no -r ./.env ${{ secrets.LINODE_USER }}@${{ secrets.LINODE_IP_ADDRESS }}:/home/${{ secrets.LINODE_USER }}/app
           ssh -o StrictHostKeyChecking=no ${{ secrets.LINODE_USER }}@${{ secrets.LINODE_IP_ADDRESS }} "\
-            LINODE_USER=$LINODE_USER \
-            IMAGE=$IMAGE \
-            NAMESPACE=$NAMESPACE \
-            PERSONAL_ACCESS_TOKEN=$PERSONAL_ACCESS_TOKEN \
+            export LINODE_USER=$LINODE_USER; \
+            export IMAGE=$IMAGE; \
+            export NAMESPACE=$NAMESPACE; \
+            export PERSONAL_ACCESS_TOKEN=$PERSONAL_ACCESS_TOKEN; \
             bash -s" << 'ENDSSH'
-              cd /home/\$LINODE_USER/app
+              cd /home/$LINODE_USER/app
               source .env
-              docker login ghcr.io -u \$NAMESPACE -p \$PERSONAL_ACCESS_TOKEN -n
-              docker pull \$IMAGE
+              docker login ghcr.io -u $NAMESPACE -p $PERSONAL_ACCESS_TOKEN -n
+              docker pull $IMAGE
               docker stop ln-websocket-proxy
               docker rm ln-websocket-proxy
-              docker run --restart unless-stopped -d --name ln-websocket-proxy -p 3001:3001 \$IMAGE
+              docker run --restart unless-stopped -d --name ln-websocket-proxy -p 3001:3001 $IMAGE
           ENDSSH
