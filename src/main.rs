@@ -7,7 +7,7 @@ use axum::{
     routing::get,
     Router,
 };
-use bitcoin_hashes::hex::FromHex;
+use bitcoin_hashes::hex::{FromHex, ToHex};
 use bytes::Bytes;
 use futures::executor::block_on;
 use futures::lock::Mutex;
@@ -273,7 +273,7 @@ async fn handle_mutiny_ws(
                                             try_send_disconnect_ws_command(peer_tx.clone(), owner_id_bytes.clone()).await;
                                             connected_peers.lock().await.remove(&peer_id_bytes);
                                         } else {
-                                            tracing::error!("peer tried to disconnect someone not connected to");
+                                            tracing::error!("peer ({identifier}) tried to disconnect someone ({}) not connected to", peer_id_bytes.to_hex());
                                         }
                                     }
                                 };
@@ -286,7 +286,7 @@ async fn handle_mutiny_ws(
                                 }
                                 let (id_bytes, message_bytes) = msg.split_at(PUBKEY_BYTES_LEN);
                                 let peer_id_bytes = bytes::Bytes::from(id_bytes.to_vec());
-                                tracing::debug!("received a ws msg from {identifier} to send to {:?}", peer_id_bytes);
+                                tracing::debug!("received a ws msg from {identifier} to send to {}", peer_id_bytes.to_hex());
 
                                 // find the producer and send down it
                                 if let Some((peer_tx, bc_tx)) = state.lock().await.get(&peer_id_bytes) {
@@ -296,7 +296,7 @@ async fn handle_mutiny_ws(
                                             // peer. We will need to know when to send a disconnect cmd
                                             // message back to the websocket owner if this peer goes
                                             // offline.
-                                            tracing::debug!("successfully sent msg to {:?}", peer_id_bytes);
+                                            tracing::debug!("successfully sent msg to {}", peer_id_bytes.to_hex());
                                             listen_for_disconnections(connected_peers.clone(), peer_id_bytes.clone(), bc_tx.subscribe(), tx.clone()).await;
                                         },
                                         Err(e) => {
@@ -308,7 +308,7 @@ async fn handle_mutiny_ws(
                                     }
                                 } else {
                                     // if no producer, return a close command
-                                    tracing::error!("no producer found, sending disconnect");
+                                    tracing::error!("no producer found for peer ({}), sending disconnect back to socket for peer ({identifier})", peer_id_bytes.to_hex());
                                     try_send_disconnect_ws_command(tx.clone(), peer_id_bytes).await;
                                 }
                             },
@@ -326,7 +326,7 @@ async fn handle_mutiny_ws(
                     // rely on the next message sent causing a disconnection.
                     try_broadcast_disconnect(bc_tx);
                     state.lock().await.remove(&owner_id_bytes);
-                    tracing::info!("Websocket owner closed the connection");
+                    tracing::info!("Websocket owner closed their connection: {identifier}");
                     return;
                 }
             },
@@ -338,7 +338,7 @@ async fn handle_mutiny_ws(
                     Some(message) => {
                         match message {
                             MutinyWSCommand::Send{id, val} => {
-                                tracing::debug!("received a channel msg from {:?} to send to {identifier}", id);
+                                tracing::debug!("received a channel msg from {} to send to {identifier}", id.to_hex());
                                 // put in first 33 bytes as from ID
                                 let mut concat_bytes = id[..].to_vec();
                                 let mut val_bytes = val[..].to_vec();
@@ -353,7 +353,7 @@ async fn handle_mutiny_ws(
                                         // websocket owner SHOULD send a message back for us to
                                         // consider them connected, in which case the other flow
                                         // should add the listener.
-                                        tracing::debug!("sent channel msg down socket from {:?} to to {identifier}", id);
+                                        tracing::debug!("sent channel msg down socket from {} to to {identifier}", id.to_hex());
                                     },
                                     Err(e) => {
                                         // if we can't send down websocket, kill the connection
@@ -366,7 +366,7 @@ async fn handle_mutiny_ws(
                                 }
                             }
                             MutinyWSCommand::Disconnect{id} => {
-                                tracing::debug!("received a channel msg from {:?} to disconnect from {identifier}", id);
+                                tracing::debug!("received a channel msg from {} to disconnect from {identifier}", id.to_hex());
                                 match socket.send(Message::Text(serde_json::to_string(&MutinyProxyCommand::Disconnect{to: owner_id_bytes.to_vec(), from: id.to_vec()}).unwrap())).await {
                                     Ok(_) => (),
                                     Err(e) => {
@@ -419,8 +419,8 @@ async fn listen_for_disconnections(
             Err(e) => {
                 // we got an error? well disconnect anyways I guess, but log it!
                 tracing::error!(
-                    "got an error listening for broadcast messages from {:?}: {}",
-                    other_peer,
+                    "got an error listening for broadcast messages from {}: {}",
+                    other_peer.to_hex(),
                     e
                 );
                 try_send_disconnect_ws_command(tx.clone(), other_peer.clone()).await;
