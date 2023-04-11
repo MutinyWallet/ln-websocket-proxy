@@ -42,6 +42,7 @@ jobs:
       - name: Add environment variables to .env
         run: |
           echo "IMAGE=${{ env.IMAGE }}" >> .env
+          echo "LINODE_USER=${{ secrets.LINODE_USER }}" >> .env
           echo "NAMESPACE=${{ secrets.NAMESPACE }}" >> .env
           echo "PERSONAL_ACCESS_TOKEN=${{ secrets.PERSONAL_ACCESS_TOKEN }}" >> .env
       - name: Add the private SSH key to the ssh-agent
@@ -58,7 +59,7 @@ jobs:
         run: |
           scp  -o StrictHostKeyChecking=no -r ./.env ${{ secrets.LINODE_USER }}@${{ secrets.LINODE_IP_ADDRESS }}:/home/${{ secrets.LINODE_USER }}/app
           ssh -o StrictHostKeyChecking=no ${{ secrets.LINODE_USER }}@${{ secrets.LINODE_IP_ADDRESS }} << 'ENDSSH'
-            cd /app
+            cd /home/$LINODE_USER/app
             source .env
             docker login ghcr.io -u $NAMESPACE -p $PERSONAL_ACCESS_TOKEN
             docker pull $IMAGE
