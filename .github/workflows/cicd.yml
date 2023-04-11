@@ -58,12 +58,17 @@ jobs:
           SSH_AUTH_SOCK: /tmp/ssh_agent.sock
         run: |
           scp  -o StrictHostKeyChecking=no -r ./.env ${{ secrets.LINODE_USER }}@${{ secrets.LINODE_IP_ADDRESS }}:/home/${{ secrets.LINODE_USER }}/app
-          ssh -o StrictHostKeyChecking=no ${{ secrets.LINODE_USER }}@${{ secrets.LINODE_IP_ADDRESS }} << 'ENDSSH'
-            cd /home/$LINODE_USER/app
-            source .env
-            docker login ghcr.io -u $NAMESPACE -p $PERSONAL_ACCESS_TOKEN
-            docker pull $IMAGE
-            docker stop ln-websocket-proxy
-            docker rm ln-websocket-proxy
-            docker run --restart unless-stopped -d --name ln-websocket-proxy -p 3001:3001 $IMAGE
+          ssh -o StrictHostKeyChecking=no ${{ secrets.LINODE_USER }}@${{ secrets.LINODE_IP_ADDRESS }} "\
+            LINODE_USER=$LINODE_USER \
+            IMAGE=$IMAGE \
+            NAMESPACE=$NAMESPACE \
+            'bash -s' << 'ENDSSH'
+              cd /home/\$LINODE_USER/app
+              source .env
+              docker login ghcr.io -u \$NAMESPACE -p \$PERSONAL_ACCESS_TOKEN -n
+              docker pull \$IMAGE
+              docker stop ln-websocket-proxy
+              docker rm ln-websocket-proxy
+              docker run --restart unless-stopped -d --name ln-websocket-proxy -p 3001:3001 \$IMAGE
           ENDSSH
+          "
