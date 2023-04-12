@@ -225,6 +225,19 @@ async fn handle_mutiny_ws(
         return;
     }
 
+    // check if peer is already connected
+    let mut locked_state = state.lock().await;
+    match locked_state.get(&owner_id_bytes.clone()) {
+        Some(_) => {
+            // peer already connected, return
+            tracing::warn!("Peer ({identifier}) is already connected, kill this connection");
+            return;
+        }
+        None => {
+            tracing::trace!("Peer ({identifier}) is not connected already, proceeding...");
+        }
+    }
+
     // Now create one consumer and a producer that other
     // mutiny websocket connections can reference to send
     // to later. The consumer here is to listen to events
@@ -238,10 +251,8 @@ async fn handle_mutiny_ws(
     // should know who this is from and what it means.
     let (bc_tx, _bc_rx1) = broadcast::channel::<bool>(32);
 
-    state
-        .lock()
-        .await
-        .insert(owner_id_bytes.clone(), (tx.clone(), bc_tx.clone()));
+    locked_state.insert(owner_id_bytes.clone(), (tx.clone(), bc_tx.clone()));
+    drop(locked_state);
 
     // keep track of the peers that this websocket owner is connected to
     let connected_peers = Arc::new(Mutex::new(HashSet::<bytes::Bytes>::new()));
@@ -273,7 +284,7 @@ async fn handle_mutiny_ws(
                                             try_send_disconnect_ws_command(peer_tx.clone(), owner_id_bytes.clone()).await;
                                             connected_peers.lock().await.remove(&peer_id_bytes);
                                         } else {
-                                            tracing::error!("peer ({identifier}) tried to disconnect someone ({}) not connected to", peer_id_bytes.to_hex());
+                                            tracing::warn!("peer ({identifier}) tried to disconnect someone ({}) not connected to", peer_id_bytes.to_hex());
                                         }
                                     }
                                 };
@@ -308,7 +319,7 @@ async fn handle_mutiny_ws(
                                     }
                                 } else {
                                     // if no producer, return a close command
-                                    tracing::error!("no producer found for peer ({}), sending disconnect back to socket for peer ({identifier})", peer_id_bytes.to_hex());
+                                    tracing::warn!("no producer found for peer ({}), sending disconnect back to socket for peer ({identifier})", peer_id_bytes.to_hex());
                                     try_send_disconnect_ws_command(tx.clone(), peer_id_bytes).await;
                                 }
                             },
