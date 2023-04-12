@@ -22,7 +22,7 @@ RUN cargo install --path . --features="server"
 FROM debian:bullseye-slim
 
 # Some general ENVs
-ENV RUST_LOG=debug
+ENV RUST_LOG=trace
 ENV LN_PROXY_PORT=8080
 
 # Run as "app" user
