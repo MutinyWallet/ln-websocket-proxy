@@ -9,7 +9,6 @@ use axum::{
 };
 use bitcoin_hashes::hex::{FromHex, ToHex};
 use bytes::Bytes;
-use futures::executor::block_on;
 use futures::lock::Mutex;
 use ln_websocket_proxy::MutinyProxyCommand;
 use serde::Deserialize;
@@ -19,6 +18,7 @@ use std::collections::HashSet;
 use std::env;
 use std::net::{SocketAddr, ToSocketAddrs};
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::sync::{broadcast, mpsc};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
@@ -91,12 +91,11 @@ fn format_addr_from_url(ip: String, port: String) -> String {
     format!("{}:{}", ip.replace('_', "."), port)
 }
 
-// Big help from https://github.com/HsuJv/axum-websockify
 async fn handle_socket(mut socket: WebSocket, host: String, port: String) {
     let addr_str = format_addr_from_url(host, port);
-    let addrs = addr_str.to_socket_addrs();
+    let addr_lookup = addr_str.to_socket_addrs();
 
-    if addrs.is_err() || addrs.as_ref().unwrap().len() == 0 {
+    if addr_lookup.is_err() || addr_lookup.as_ref().unwrap().len() == 0 {
         tracing::error!("Could not resolve addr {addr_str}");
         let _ = socket
             .send(Message::Text(format!("Could not resolve addr {addr_str}")))
@@ -104,15 +103,24 @@ async fn handle_socket(mut socket: WebSocket, host: String, port: String) {
         return;
     }
 
-    let mut addrs = addrs.unwrap();
+    let mut addrs = addr_lookup.unwrap();
 
     let server_stream = addrs.find_map(|addr| {
-        let connection = block_on(TcpStream::connect(&addr));
-        if let Err(error) = &connection {
-            tracing::error!("Could not connect to {addr}: {error}");
-        };
+        // Temp fix, still runs into socket issues but at least no locking
+        match std::net::TcpStream::connect_timeout(&addr, Duration::from_secs(10)) {
+            Ok(conn) => {
+                conn.set_nonblocking(true).unwrap();
+                let connection = TcpStream::from_std(conn);
+                if let Err(error) = &connection {
+                    tracing::error!("Could not connect to {addr}: {error}");
+                } else {
+                    tracing::debug!("Connected to destination server: {}", addr);
+                }
 
-        connection.ok()
+                connection.ok()
+            }
+            Err(_) => None,
+        }
     });
 
     if server_stream.is_none() {
@@ -123,9 +131,18 @@ async fn handle_socket(mut socket: WebSocket, host: String, port: String) {
         return;
     }
 
-    let mut server_stream = server_stream.unwrap();
+    let server_stream = server_stream.unwrap();
+    if let Err(e) = handle_server_stream(socket, server_stream).await {
+        tracing::error!("Error handling server stream: {:?}", e);
+    }
+}
 
+async fn handle_server_stream(
+    mut socket: WebSocket,
+    mut server_stream: TcpStream,
+) -> Result<(), Box<dyn std::error::Error>> {
     let addr = server_stream.peer_addr().unwrap();
+    tracing::info!("Handling server stream for: {}", addr);
 
     let mut buf = [0u8; 65536]; // the max lightning message size is 65536
 
@@ -134,32 +151,34 @@ async fn handle_socket(mut socket: WebSocket, host: String, port: String) {
             res  = socket.recv() => {
                 if let Some(msg) = res {
                     if let Ok(Message::Binary(msg)) = msg {
-                        tracing::debug!("Received {}, sending to {addr}", &msg.len());
+                        tracing::debug!("Received {}, sending to {}", &msg.len(), addr);
                         let _ = server_stream.write_all(&msg).await;
                     }
                 } else {
                     tracing::info!("Client close");
-                    return;
+                    break;
                 }
             },
             res  = server_stream.read(&mut buf) => {
                 match res {
                     Ok(n) => {
-                        tracing::debug!("Read {:?} from {addr}", n);
+                        tracing::debug!("Read {} bytes from server: {}", n, addr);
                         if 0 != n {
                             let _ = socket.send(Message::Binary(buf[..n].to_vec())).await;
                         } else {
-                            return ;
+                            break;
                         }
                     },
                     Err(e) => {
-                        tracing::info!("Server close with err {:?}", e);
-                        return;
+                        tracing::info!("Server {} close with error: {:?}", addr, e);
+                        break;
                     }
                 }
             },
         }
     }
+
+    Ok(())
 }
 
 async fn mutiny_ws_handler(
