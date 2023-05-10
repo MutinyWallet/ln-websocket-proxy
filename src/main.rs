@@ -305,7 +305,10 @@ async fn handle_mutiny_ws(
                                         } else {
                                             tracing::warn!("peer ({identifier}) tried to disconnect someone ({}) not connected to", peer_id_bytes.to_hex());
                                         }
-                                    }
+                                    },
+                                    MutinyProxyCommand::Ping => {
+                                        // Ignore their ping messages, just to keep alive
+                                    },
                                 };
                             },
                             Message::Binary(msg) => {
