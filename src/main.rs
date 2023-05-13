@@ -27,6 +27,7 @@ use tokio::{
 use tower_http::trace::{DefaultMakeSpan, TraceLayer};
 
 const PUBKEY_BYTES_LEN: usize = 33;
+const PING_TIMEOUT: u64 = 11;
 
 pub(crate) type WSMap =
     Arc<Mutex<HashMap<bytes::Bytes, (mpsc::Sender<MutinyWSCommand>, broadcast::Sender<bool>)>>>;
@@ -280,7 +281,7 @@ async fn handle_mutiny_ws(
     // Currently they send one every 5s, so that's 2 chances before timing out.
     // This might be too aggressive but we can judge that based on usage and warning logs.
     let mut ping_timeout = Box::pin(tokio::time::timeout(
-        std::time::Duration::from_secs(11),
+        std::time::Duration::from_secs(PING_TIMEOUT),
         futures::future::pending::<()>(),
     ));
 
@@ -316,7 +317,7 @@ async fn handle_mutiny_ws(
                                     },
                                     MutinyProxyCommand::Ping => {
                                         ping_timeout = Box::pin(tokio::time::timeout(
-                                            std::time::Duration::from_secs(15),
+                                            std::time::Duration::from_secs(PING_TIMEOUT),
                                             futures::future::pending::<()>()
                                         ));
                                     },
