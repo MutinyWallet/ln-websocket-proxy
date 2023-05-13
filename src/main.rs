@@ -276,6 +276,14 @@ async fn handle_mutiny_ws(
     // keep track of the peers that this websocket owner is connected to
     let connected_peers = Arc::new(Mutex::new(HashSet::<bytes::Bytes>::new()));
 
+    // Set a timer where we expect the client to send a Ping message at least every 11s.
+    // Currently they send one every 5s, so that's 2 chances before timing out.
+    // This might be too aggressive but we can judge that based on usage and warning logs.
+    let mut ping_timeout = Box::pin(tokio::time::timeout(
+        std::time::Duration::from_secs(11),
+        futures::future::pending::<()>(),
+    ));
+
     tracing::debug!("listening for {identifier} websocket or consumer channel",);
     loop {
         tokio::select! {
@@ -307,7 +315,10 @@ async fn handle_mutiny_ws(
                                         }
                                     },
                                     MutinyProxyCommand::Ping => {
-                                        // Ignore their ping messages, just to keep alive
+                                        ping_timeout = Box::pin(tokio::time::timeout(
+                                            std::time::Duration::from_secs(15),
+                                            futures::future::pending::<()>()
+                                        ));
                                     },
                                 };
                             },
@@ -423,6 +434,13 @@ async fn handle_mutiny_ws(
                         return;
                     }
                 }
+            },
+            // Disconnect if Ping timeout is hit
+            _ = &mut ping_timeout => {
+                try_broadcast_disconnect(bc_tx);
+                state.lock().await.remove(&owner_id_bytes);
+                tracing::warn!("Ping timeout expired, closing connection: {identifier}");
+                return;
             },
         }
     }
