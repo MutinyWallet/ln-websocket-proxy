@@ -1,4 +1,4 @@
-# ln-tcp-proxy
+# ln-websocket-proxy
 
 Websocket-based proxy for connecting to lightning nodes and mutiny wallets.
 
@@ -7,20 +7,20 @@ Websocket-based proxy for connecting to lightning nodes and mutiny wallets.
 Build the websocket-tcp-proxy image
 
 ```
-DOCKER_BUILDKIT=1 docker build -f Dockerfile -t mutinywallet/ln-tcp-proxy .
+DOCKER_BUILDKIT=1 docker build -f Dockerfile -t mutinywallet/ln-websocket-proxy .
 ```
 
 Run the docker image locally
 
 ```
-docker run -d -p 3001:3001 mutinywallet/ln-tcp-proxy
+docker run -d -p 3001:3001 mutinywallet/ln-websocket-proxy
 ```
 
 Deploy the docker image:
 
 ```
-docker tag mutinywallet/ln-tcp-proxy registry.digitalocean.com/bitcoindevshop-do/websocket-tcp-proxy
-docker push registry.digitalocean.com/bitcoindevshop-do/websocket-tcp-proxy
+docker tag mutinywallet/ln-websocket-proxy registry.digitalocean.com/mutiny-wallet/websocket-tcp-proxy
+docker push registry.digitalocean.com/mutiny-wallet/websocket-tcp-proxy
 ```
 
 ## How to test
