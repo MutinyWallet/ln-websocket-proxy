@@ -5,6 +5,11 @@ RUN USER=root cargo new app
 WORKDIR /usr/src/app
 RUN mkdir ln-websocket-proxy
 COPY Cargo.toml Cargo.lock ./
+
+# cargo under QEMU building for ARM can consumes 10s of GBs of RAM...
+# Solution: https://users.rust-lang.org/t/cargo-uses-too-much-memory-being-run-in-qemu/76531/2
+ENV CARGO_NET_GIT_FETCH_WITH_CLI true
+
 # Needs at least a main.rs file with a main function
 # Since this is a rust workspace, we need to init the other things too
 RUN mkdir src && echo "fn main(){}" > src/main.rs && echo "fn main(){}" > src/lib.rs
