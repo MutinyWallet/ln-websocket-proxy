@@ -19,7 +19,8 @@ use std::env;
 use std::net::{SocketAddr, ToSocketAddrs};
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::{broadcast, mpsc};
+use tokio::signal::unix::{signal, SignalKind};
+use tokio::sync::{broadcast, mpsc, oneshot};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::TcpStream,
@@ -65,13 +66,47 @@ async fn main() {
         Ok(p) => p.parse().expect("port must be a u16 string"),
         Err(_) => 3001,
     };
+
+    // Set up a oneshot channel to handle shutdown signal
+    let (tx, rx) = oneshot::channel();
+
+    // Spawn a task to listen for shutdown signals
+    tokio::spawn(async move {
+        let mut term_signal = signal(SignalKind::terminate())
+            .map_err(|e| tracing::error!("failed to install TERM signal handler: {e}"))
+            .unwrap();
+        let mut int_signal = signal(SignalKind::interrupt())
+            .map_err(|e| {
+                tracing::error!("failed to install INT signal handler: {e}");
+            })
+            .unwrap();
+
+        tokio::select! {
+            _ = term_signal.recv() => {
+                tracing::info!("Received SIGTERM");
+            },
+            _ = int_signal.recv() => {
+                tracing::info!("Received SIGINT");
+            },
+        }
+
+        let _ = tx.send(());
+    });
+
     let addr = SocketAddr::from(([0, 0, 0, 0], port));
     tracing::info!("listening on {}", addr);
-    axum::Server::bind(&addr)
-        .serve(app.into_make_service())
-        .await
-        .unwrap();
-    println!("Stopping websocket-tcp-proxy");
+    let server = axum::Server::bind(&addr).serve(app.into_make_service());
+
+    let graceful = server.with_graceful_shutdown(async {
+        let _ = rx.await;
+    });
+
+    // Await the server to receive the shutdown signal
+    if let Err(e) = graceful.await {
+        tracing::error!("shutdown error: {e}");
+    }
+
+    tracing::info!("Graceful shutdown complete");
 }
 
 async fn ws_handler(
