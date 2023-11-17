@@ -46,7 +46,7 @@ mod tests {
         assert_eq!(
             "{\"Disconnect\":{\"to\":[1,1],\"from\":[10,10]}}",
             serde_json::to_string(&MutinyProxyCommand::Disconnect {
-                to: vec![01, 01],
+                to: vec![1, 1],
                 from: vec![10, 10]
             })
             .unwrap()
